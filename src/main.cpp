@@ -66,13 +66,6 @@ void loop()
         // Serial.println("System operations are halted...");
         gauge.sleep();  // Forces the MAX17043 into sleep mode
     }
-
-    if (ble::isServerConnected) {
-        updateStateOfCharge();
-        MEMCPY(&batteryLevelCharacteristicValue, &stateOfCharge, 4);
-        pBatteryLevelCharacteristic->setValue((uint8_t *) batteryLevelCharacteristicValue, 4);
-        pBatteryLevelCharacteristic->notify();
-    }
     
     currentTime = millis();
     if (currentTime >= lastTime + battery_level_delay_ms) {
@@ -82,6 +75,10 @@ void loop()
         // Serial.print(gauge.getVoltage());  // Gets the battery voltage
         // Serial.println('V');
         lastTime = currentTime;
+        updateStateOfCharge();
+        MEMCPY(&batteryLevelCharacteristicValue, &stateOfCharge, 4);
+        pBatteryLevelCharacteristic->setValue((uint8_t *) batteryLevelCharacteristicValue, 4);
+        pBatteryLevelCharacteristic->notify();
     }
 }
 
