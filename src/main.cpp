@@ -38,6 +38,10 @@ void setup()
     Serial.begin(115200); // Initializes serial port
 
     ble::setup();
+    // NOTE: make sure to add BLE service and characteristic prior to advertising the service
+    pBatteryService = ble::pServer->createService(BLEUUID((uint16_t)0x180F));
+    pBatteryLevelCharacteristic = ble::createCharacteristic(BLEUUID((uint16_t)0x2A19), NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY, "Battery Level", pBatteryService);
+    pBatteryService->start();
     ble::start();
 
     gauge.reset();  // Resets MAX17043
@@ -48,34 +52,29 @@ void setup()
     Serial.println(String("Alert Threshold is set to ") + 
                    gauge.getAlertThreshold() + '%');
 
-    pBatteryService = ble::pServer->createService(BLEUUID((uint16_t)0x180F));
-    pBatteryLevelCharacteristic = ble::createCharacteristic(BLEUUID((uint16_t)0x2A19), NIMBLE_PROPERTY::READ | NIMBLE_PROPERTY::NOTIFY, "Battery Level", pBatteryService);
-    pBatteryService->start();
 }
 
 void loop()
 {
-    if ( alert )
-    {
-        // Serial.println("Beware, Low Power!");
-        // Serial.println("Finalizing operations...");
-        gauge.clearAlertInterrupt();  // Resets the ALRT pin
-        alert = false;
-        // Serial.println("Storing data...");
-        // Serial.println("Sending notification...");
-        // Serial.println("System operations are halted...");
-        gauge.sleep();  // Forces the MAX17043 into sleep mode
-    }
-    
     currentTime = millis();
-    if (currentTime >= lastTime + battery_level_delay_ms) {
-        // Serial.print("SOC: ");
-        // Serial.print(gauge.getSOC());  // Gets the battery's state of charge
-        // Serial.print("%, VCELL: ");
-        // Serial.print(gauge.getVoltage());  // Gets the battery voltage
-        // Serial.println('V');
+    if (ble::isServerConnected && currentTime >= lastTime + battery_level_delay_ms) {
+        if (alert)
+        {
+            Serial.println("Beware, Low Power!");
+            Serial.println("Finalizing operations...");
+            gauge.clearAlertInterrupt();  // Resets the ALRT pin
+            alert = false;
+            Serial.println("Storing data...");
+            Serial.println("Sending notification...");
+            Serial.println("System operations are halted...");
+            gauge.sleep();  // Forces the MAX17043 into sleep mode
+        }
+
         lastTime = currentTime;
         updateStateOfCharge();
+        Serial.print("SOC: ");
+        Serial.print(stateOfCharge);
+        Serial.println();
         MEMCPY(&batteryLevelCharacteristicValue, &stateOfCharge, 4);
         pBatteryLevelCharacteristic->setValue((uint8_t *) batteryLevelCharacteristicValue, 4);
         pBatteryLevelCharacteristic->notify();
