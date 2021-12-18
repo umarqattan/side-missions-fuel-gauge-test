@@ -3,6 +3,7 @@
 #include "ble.h"
 #include "name.h"
 #include <lwipopts.h>
+#include "SparkFun_BNO080_Arduino_Library.h" // Click here to get the library: http://librarymanager/All#SparkFun_BNO080
 
 
 // LiFuelGauge constructor parameters
@@ -16,8 +17,13 @@
 // A flag to indicate a generated alert interrupt
 volatile boolean alert = false;
 
-void lowPower() { alert = true; }
-LiFuelGauge gauge(MAX17043, 0, lowPower);
+void lowPower() { 
+    Serial.print("You should lower the 'low power' threshold by 10% now.");
+    alert = true; 
+}
+LiFuelGauge gauge(MAX17043, 25, lowPower);
+BNO080 IMU;
+
 
 const uint16_t battery_level_delay_ms = 1000;
 
@@ -52,6 +58,24 @@ void setup()
     Serial.println(String("Alert Threshold is set to ") + 
                    gauge.getAlertThreshold() + '%');
 
+
+    // Start i2c and BNO080
+    Wire.flush();   // Reset I2C
+    IMU.begin(BNO080_DEFAULT_ADDRESS, Wire);
+    Wire.begin(SDA, SCL); 
+    //Wire.setClockStretchLimit(4000);
+
+    if (!IMU.begin())
+    {
+        Serial.println(F("BNO080 not detected at default I2C address. Check your jumpers and the hookup guide. Freezing..."));
+        while (1);
+    }
+
+    Wire.setClock(400000); //Increase I2C data rate to 400kHz
+    IMU.enableRotationVector(50); //Send data update every 50ms
+
+    Serial.println(F("Rotation vector enabled"));
+    Serial.println(F("Output in form roll, pitch, yaw"));
 }
 
 void loop()
@@ -70,6 +94,11 @@ void loop()
             gauge.sleep();  // Forces the MAX17043 into sleep mode
         }
 
+        // Note: the following code reads the VBAT Voltage level but not the current charge.
+        float level = (float(analogRead(A13) * 2 * 3.3 / 4095));
+        Serial.print("Battery Level: ");
+        Serial.println(level);
+
         lastTime = currentTime;
         updateStateOfCharge();
         Serial.print("SOC: ");
@@ -78,6 +107,32 @@ void loop()
         MEMCPY(&batteryLevelCharacteristicValue, &stateOfCharge, 4);
         pBatteryLevelCharacteristic->setValue((uint8_t *) batteryLevelCharacteristicValue, 4);
         pBatteryLevelCharacteristic->notify();
+
+        //Look for reports from the IMU
+        if (IMU.dataAvailable() == true)
+        {
+            unsigned long timeStamp = IMU.getTimeStamp();
+            float quatI = IMU.getQuatI();
+            float quatJ = IMU.getQuatJ();
+            float quatK = IMU.getQuatK();
+            float quatReal = IMU.getQuatReal();
+            float quatRadianAccuracy = IMU.getQuatRadianAccuracy();
+
+            Serial.print(timeStamp);
+            Serial.print(F(","));
+            Serial.print(quatI, 2);
+            Serial.print(F(","));
+            Serial.print(quatJ, 2);
+            Serial.print(F(","));
+            Serial.print(quatK, 2);
+            Serial.print(F(","));
+            Serial.print(quatReal, 2);
+            Serial.print(F(","));
+            Serial.print(quatRadianAccuracy, 2);
+            Serial.print(F(","));
+
+            Serial.println();
+        }
     }
 }
 
